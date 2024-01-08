@@ -31,7 +31,8 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = '/seo_serv/kommerssc-f064e012adc1
 property_id = '341387871'
 
 credentials_path = '/seo_serv/kommerssc-d113d5ba4912.json'
-credentials = service_account.Credentials.from_service_account_file(credentials_path, scopes=['https://www.googleapis.com/auth/webmasters.readonly'])
+credentials = service_account.Credentials.from_service_account_file(credentials_path, scopes=[
+    'https://www.googleapis.com/auth/webmasters.readonly'])
 service = build('webmasters', 'v3', credentials=credentials)
 
 # Запрос на получение списка сайтов
@@ -40,18 +41,15 @@ sites_list = service.sites().list().execute()
 
 # Вывод списка сайтов
 # for site in sites_list['siteEntry']:
-    # print(site['siteUrl'])
+# print(site['siteUrl'])
 
 def main():
-
     today = datetime.today()
     today2 = today.date()
     yesterday = (today - timedelta(days=1)).date()
-    days30_before = (today - timedelta(days=30)).date()
-    # start = yesterday
-    # end = today2
+    twomonth_before = (today - timedelta(days=60)).date()
 
-    start = str(days30_before)
+    start = str(twomonth_before)
     end = str(today2)
 
     def query(service, site_url, payload):
@@ -68,11 +66,12 @@ def main():
             data['position'] = round(row['position'], 2)
 
             # Применение фильтров
-            # if 9 <= data['position'] <= 20 and data['impressions'] >= 2000 and 0 <= data['ctr'] <= 2:
-            if 10 <= data['position'] <= 30 and 0 <= data['ctr'] <= 2:
+            # if 10 <= data['position'] <= 15 and 5000 <= data['impressions'] and data['impressions'] <= 40000 and 0 <= data['ctr'] <= 3:
+            # if 10 <= data['position'] <= 20 and 10000 <= data['impressions'] and 0 <= data['ctr'] <= 2:
+            if 'doc' in data['page'] or 'gallery' in data['page']:
                 results.append(data)
-        # Сортировка по показам
-                results.sort(key=lambda x: x['impressions'], reverse=True)
+                # Сортировка по показам
+            results.sort(key=lambda x: x['impressions'], reverse=True)
 
         return pd.DataFrame.from_dict(results)
 
@@ -88,11 +87,12 @@ def main():
     site_url = "sc-domain:kommersant.ru"
 
     df = query(service, site_url, payload)
+    df = df.head(400)
 
     # Добавьте этот код после определения функции query
 
     # df_filtered = df.dropna()  # Удаление строк с отсутствующими значениями
-    df_filtered = df[['page', 'impressions', 'ctr', 'position']]  # Выбор нужных столбцов
+    df_filtered = df[['page', 'impressions', 'clicks', 'ctr', 'position']]  # Выбор нужных столбцов
     # df_filtered = df_filtered.astype({'impressions': int, 'position': int})  # Приведение типов данных
     # df_filtered = df_filtered.astype(str)
 
@@ -143,41 +143,43 @@ def main():
 
     titles_list = list(dict.fromkeys(titles_list))  # убираем из списка дубли
 
-    df_filtered['заголовок'] = pd.Series(titles_list + [''] * (len(df_filtered) - len(titles_list)), index=df_filtered.index)
+    df_filtered['заголовок'] = pd.Series(titles_list + [''] * (len(df_filtered) - len(titles_list)),
+                                         index=df_filtered.index)
     # df_filtered['заголовок'] = titles_list
-    df_filtered = df_filtered.astype({'impressions': int, 'position': int, 'заголовок': str})
-    # print(df_filtered)
+    df_filtered = df_filtered.astype({'impressions': int, 'clicks': int, 'ctr': float, 'position': int, 'заголовок': str})
 
-    df_filtered.to_csv('seo_titles.csv', index=False)
+    df_filtered.to_csv('seo_leader_urls.csv', index=False)
 
     # Путь к локальному репозиторию
     repo_path = '/seo_serv'
-    
+
     # Инициализация репозитория
     repo = Repo(repo_path)
-    
-    # Добавление файла seo_titles.csv
-    file_path = '/seo_serv/seo_titles.csv'
+
+    # Добавление файла seo_leader_urls.csv
+    file_path = '/seo_serv/seo_leader_urls.csv'
     repo.index.add([file_path])
-    
+
     # Создание коммита
-    repo.index.commit('Добавлен файл seo_titles.csv')
-    
+    repo.index.commit('Добавлен файл seo_leader_urls.csv')
+
     # Отправка изменений на удаленный репозиторий
     origin = repo.remote('origin')
     origin.push()
-    
-    print("готово")
+
+    print("готово, выгрузились топ-seo-урлы за посл 60 дней (seo_leader_urls)")
 
 
-# настройка расписания
-schedule.every().monday.at("08:00", "Europe/Moscow").do(main)
-# schedule.every(3).hours.do(main)
+main()
+
+# # настройка расписания
+# schedule.every().day.at("08:00", "Europe/Moscow").do(main)
+schedule.every().monday.at("09:15").do(main)
+# # schedule.every(3).hours.do(main)
 
 while True:
     schedule.run_pending()
     time.sleep(1)
 
 if __name__ == "__main__":
-  main()
-  
+    main()

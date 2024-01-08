@@ -37,21 +37,18 @@ service = build('webmasters', 'v3', credentials=credentials)
 # Запрос на получение списка сайтов
 sites_list = service.sites().list().execute()
 
-
 # Вывод списка сайтов
-# for site in sites_list['siteEntry']:
-    # print(site['siteUrl'])
+for site in sites_list['siteEntry']:
+    print(site['siteUrl'])
 
 def main():
-
     today = datetime.today()
     today2 = today.date()
-    yesterday = (today - timedelta(days=1)).date()
-    days30_before = (today - timedelta(days=30)).date()
-    # start = yesterday
-    # end = today2
+    seven_before = (today - timedelta(days=7)).date()
+    # threedays_before = (today - timedelta(days=3)).date()
+    # threemonths_before = (today - timedelta(days=90)).date()
 
-    start = str(days30_before)
+    start = str(seven_before)
     end = str(today2)
 
     def query(service, site_url, payload):
@@ -66,109 +63,57 @@ def main():
             data['clicks'] = row['clicks']
             data['ctr'] = round(row['ctr'] * 100, 2)
             data['position'] = round(row['position'], 2)
-
-            # Применение фильтров
-            # if 9 <= data['position'] <= 20 and data['impressions'] >= 2000 and 0 <= data['ctr'] <= 2:
-            if 10 <= data['position'] <= 30 and 0 <= data['ctr'] <= 2:
+            #
+            # if 'gallery' in data['page']:
+                # Применение фильтров
+            # if 5 <= data['position'] <= 15 and data['impressions'] >= 1 and 0 <= data['ctr'] <= 4:
+            if all(keyword not in data['query'] for keyword in ['автомобиль', 'Автопилот', 'autopilot.ru', 'автопилот', 'журнал автопилот']):
                 results.append(data)
         # Сортировка по показам
-                results.sort(key=lambda x: x['impressions'], reverse=True)
+        results.sort(key=lambda x: x['impressions'], reverse=True)
 
         return pd.DataFrame.from_dict(results)
 
     payload = {
         'startDate': f'{start}',
         'endDate': f'{end}',
-        'dimensions': ["page"],
+        'dimensions': ["query"],
         'rowLimit': 3000,
         'startRow': 0,
         'dataState': 'all'
     }
 
-    site_url = "sc-domain:kommersant.ru"
+    site_url = "sc-domain:autopilot.ru"
 
     df = query(service, site_url, payload)
 
-    # Добавьте этот код после определения функции query
+    df = df.head(200)
 
     # df_filtered = df.dropna()  # Удаление строк с отсутствующими значениями
-    df_filtered = df[['page', 'impressions', 'ctr', 'position']]  # Выбор нужных столбцов
-    # df_filtered = df_filtered.astype({'impressions': int, 'position': int})  # Приведение типов данных
-    # df_filtered = df_filtered.astype(str)
+    df_filtered = df[['query', 'impressions', 'clicks', 'ctr', 'position']]  # Выбор нужных столбцов
 
-    urls_list = df_filtered['page'].tolist()
-    dimensions_list = []
+    df_filtered = df_filtered.astype({'query': str, 'impressions': int, 'clicks': int, 'ctr': float, 'position': int})
 
-    for i in urls_list:
-        client = BetaAnalyticsDataClient()
-        property_id = '341387871'
-        property_str = f"properties/{property_id}"
-
-        request = RunReportRequest(
-            property=property_str,
-            dimensions=[
-                Dimension(name="pageTitle"),
-                Dimension(name="pageLocation"),
-                # Dimension(name="unifiedScreenClass"),
-            ],
-            metrics=[Metric(name="screenPageViews")],
-            date_ranges=[DateRange(start_date=start, end_date=end)],
-            dimension_filter=FilterExpression(and_group=FilterExpressionList(expressions=[
-                FilterExpression(
-                    filter=Filter(
-                        field_name='pageLocation',
-                        string_filter=Filter.StringFilter(
-                            value=f'{i}',
-                            match_type=Filter.StringFilter.MatchType.EXACT
-                        )
-                    )
-                )
-            ]))
-        )
-
-        response = client.run_report(request)
-
-        # Добавление dimensions и их values в список
-        for dimension in response.dimension_headers:
-            dimensions_list.append({
-                'name': dimension.name,
-                'values': [row.dimension_values[0].value for row in response.rows]
-            })
-
-    titles_list = []
-    for dimension in dimensions_list:
-        # print(f"Dimension: {dimension['name']}")
-        names = tuple(dimension['values'])
-        titles_list.append(names)
-
-    titles_list = list(dict.fromkeys(titles_list))  # убираем из списка дубли
-
-    df_filtered['заголовок'] = pd.Series(titles_list + [''] * (len(df_filtered) - len(titles_list)), index=df_filtered.index)
-    # df_filtered['заголовок'] = titles_list
-    df_filtered = df_filtered.astype({'impressions': int, 'position': int, 'заголовок': str})
-    # print(df_filtered)
-
-    df_filtered.to_csv('seo_titles.csv', index=False)
+    df_filtered.to_csv('autopilot_queries.csv', index=False)
 
     # Путь к локальному репозиторию
     repo_path = '/seo_serv'
-    
+
     # Инициализация репозитория
     repo = Repo(repo_path)
-    
-    # Добавление файла seo_titles.csv
-    file_path = '/seo_serv/seo_titles.csv'
+
+    # Добавление файла fresh_queries.csv
+    file_path = '/seo_serv/autopilot_queries.csv'
     repo.index.add([file_path])
-    
+
     # Создание коммита
-    repo.index.commit('Добавлен файл seo_titles.csv')
-    
+    repo.index.commit('Добавлен файл autopilot_queries.csv')
+
     # Отправка изменений на удаленный репозиторий
     origin = repo.remote('origin')
     origin.push()
-    
-    print("готово")
 
+    print("готово, запросы за неделю выгрузились (autopilot_queries)")
 
 # настройка расписания
 schedule.every().monday.at("08:00", "Europe/Moscow").do(main)
@@ -179,5 +124,5 @@ while True:
     time.sleep(1)
 
 if __name__ == "__main__":
-  main()
-  
+    main()
+

@@ -4,132 +4,170 @@ import pandas as pd
 import os
 import gspread
 from datetime import datetime, timedelta
+import schedule
+import time
+from git import Repo
+import csv
+from github import Github
 
-today = datetime.today()
-today2 = today.date()
-yesterday = (today - timedelta(days=1)).date()
-start = (today - timedelta(days=15)).date()
-end = (today - timedelta(days=2)).date()
-
-user_id = '86798900'
-host_id = 'https:www.kommersant.ru:443'
-date1 = str(start)
-date2 = str(end)
-
-headers = {'Authorization': 'OAuth y0_AgAAAAAFLHI0AAo8CQAAAADoptVSzQZRaNA4S-CecPn9XzrO1zEkpcw',
-           'Content-Type': 'application/json; charset=UTF-8'}
-params = {
-  "offset": 1,
-  "limit": 100,
-  "device_type_indicator": "ALL",
-  "text_indicator": "URL",
-  "filters": {
-    "statistic_filters": [
-      {
+def main():
+    today = datetime.today()
+    today2 = today.date()
+    yesterday = (today - timedelta(days=1)).date()
+    start = (today - timedelta(days=4)).date()
+    end = (today - timedelta(days=2)).date()
+    
+    user_id = '86798900'
+    host_id = 'https:www.kommersant.ru:443'
+    # date1 = str(start)
+    # date2 = str(end)
+    date1 = '2023-10-30'
+    date2 = '2023-11-12'
+    
+    headers = {'Authorization': 'OAuth y0_AgAAAAAFLHI0AAo8CQAAAADoptVSzQZRaNA4S-CecPn9XzrO1zEkpcw',
+               'Content-Type': 'application/json; charset=UTF-8'}
+    params = {
+      "offset": 1,
+      "limit": 100,
+      "device_type_indicator": "ALL",
+      "text_indicator": "URL",
+      "filters": {
+        "statistic_filters": [
+          {
+            "statistic_field": "IMPRESSIONS",
+            "operation": "GREATER_EQUAL",
+            "value": "10",
+            "from": f'{date1}',
+            "to": f'{date2}'
+          },
+        #     {
+        #     "statistic_field": "IMPRESSIONS",
+        #     "operation": "LESS_EQUAL",
+        #     "value": "3000",
+        #     "from": f'{date1}',
+        #     "to": f'{date2}'
+        #   },
+          {
+            "statistic_field": "POSITION",
+            "operation": "GREATER_EQUAL",
+            "value": "10",
+            "from": f'{date1}',
+            "to": f'{date2}'
+          },
+        #   {
+        #     "statistic_field": "POSITION",
+        #     "operation": "LESS_EQUAL",
+        #     "value": "14",
+        #     "from": f'{date1}',
+        #     "to": f'{date2}'
+        #   },
+          {
+            "statistic_field": "CTR",
+            "operation": "LESS_EQUAL",
+            "value": "3.0",
+            "from": f'{date1}',
+            "to": f'{date2}'
+          }
+        ]
+      },
+      "sort_by_date": {
+        "date": f'{date2}',
         "statistic_field": "IMPRESSIONS",
-        "operation": "GREATER_EQUAL",
-        "value": "50",
-        "from": f'{date1}',
-        "to": f'{date2}'
-      },
-      {
-        "statistic_field": "POSITION",
-        "operation": "GREATER_EQUAL",
-        "value": "4",
-        "from": f'{date1}',
-        "to": f'{date2}'
-      },
-      {
-        "statistic_field": "POSITION",
-        "operation": "LESS_EQUAL",
-        "value": "14",
-        "from": f'{date1}',
-        "to": f'{date2}'
-      },
-      {
-        "statistic_field": "CTR",
-        "operation": "LESS_EQUAL",
-        "value": "3.0",
-        "from": f'{date1}',
-        "to": f'{date2}'
-      }
-    ]
+        "by": "DESC"
   }
-}
-
-query_monitor = f'https://api.webmaster.yandex.net/v4/user/{user_id}/hosts/{host_id}/query-analytics/list'
-
-r = requests.post(query_monitor, headers=headers, json=params)
-data = r.json()
-# print(json.dumps(data, indent=4, ensure_ascii=False))
-
-urls = []
-for i in data['text_indicator_to_statistics']:
-  urls_list = i['text_indicator']['value']
-  urls.append(urls_list)
-
-whole_urls = []
-for url in urls:
-  whole_url = 'https://www.kommersant.ru' + url
-  whole_urls.append(whole_url)
-print(whole_urls)
-
-queries_list_of_lists = []
-for url in urls:
-  params2 = {
-    "offset": 0,
-    "limit": 100,
-    "device_type_indicator": "ALL",
-    "text_indicator": "QUERY",
-    "filters": {
-      "text_filters": [
-        {
-          "text_indicator": "URL",
-          "operation": "TEXT_CONTAINS",
-          "value": f"{url}"
-        }
-      ]
     }
-  }
-  query_monitor2 = f'https://api.webmaster.yandex.net/v4/user/{user_id}/hosts/{host_id}/query-analytics/list'
+    
+    query_monitor = f'https://api.webmaster.yandex.net/v4/user/{user_id}/hosts/{host_id}/query-analytics/list'
+    
+    r = requests.post(query_monitor, headers=headers, json=params)
+    data = r.json()
+    # print(json.dumps(data, indent=4, ensure_ascii=False))
+    
+    urls = []
+    for i in data['text_indicator_to_statistics']:
+      urls_list = i['text_indicator']['value']
+      urls.append(urls_list)
 
-  r = requests.post(query_monitor2, headers=headers, json=params2)
-  data2 = r.json()
-  # print(json.dumps(data2, indent=4, ensure_ascii=False))
-  queries = []
-  for i in data2['text_indicator_to_statistics']:
-    query_list = i['text_indicator']['value']
-    queries.append(query_list)
-  top_queries = queries[:6]
-  queries_list_of_lists.append(top_queries)
-# print(queries_list_of_lists)
+    whole_urls = []
+    for url in urls:
+      whole_url = 'https://www.kommersant.ru' + url
+      whole_urls.append(whole_url)
+    # print(whole_urls)
+    
+    queries_list_of_lists = []
+    for url in urls:
+      params2 = {
+        "offset": 0,
+        "limit": 100,
+        "device_type_indicator": "ALL",
+        "text_indicator": "QUERY",
+        "filters": {
+          "text_filters": [
+            {
+              "text_indicator": "URL",
+              "operation": "TEXT_CONTAINS",
+              "value": f"{url}"
+            }
+          ]
+        }
+      }
+      query_monitor2 = f'https://api.webmaster.yandex.net/v4/user/{user_id}/hosts/{host_id}/query-analytics/list'
+    
+      r = requests.post(query_monitor2, headers=headers, json=params2)
+      data2 = r.json()
+      # print(json.dumps(data2, indent=4, ensure_ascii=False))
+      queries = []
+      for i in data2['text_indicator_to_statistics']:
+        query_list = i['text_indicator']['value']
+        queries.append(query_list)
+      top_queries = queries[:6]
+      queries_list_of_lists.append(top_queries)
+    # print(queries_list_of_lists)
+    
+    dictionary = dict(zip(whole_urls, queries_list_of_lists))
+    # print(dictionary)
+    
+    # df = pd.DataFrame(whole_urls, queries_list_of_lists)
+    df = pd.DataFrame(list(dictionary.items ()), columns = ['URL', 'Запросы'])
+    df['Запросы'] = df['Запросы'].apply(lambda x: ', '.join(x))
+    # print(df)
+    df = df.astype({'URL':str, 'Запросы':str})
+    df.to_csv('query_monitor.csv', index=False)
+    
+    # Путь к локальному репозиторию
+    repo_path = '/seo_serv'
+    
+    # Инициализация репозитория
+    repo = Repo(repo_path)
+    
+    # Добавление файла query_monitor.csv
+    file_path = '/seo_serv/query_monitor.csv'
+    repo.index.add([file_path])
+    
+    # Создание коммита
+    repo.index.commit('Добавлен файл query_monitor.csv')
+    
+    # Отправка изменений на удаленный репозиторий
+    origin = repo.remote('origin')
+    origin.push()
+    print('готово, Мониторинг запросов отработал')
+    
 
-dictionary = dict(zip(whole_urls, queries_list_of_lists))
-print(dictionary)
+# настройка расписания
+# schedule.every().day.at("10:00", "Europe/Moscow").do(main)
 
-# df = pd.DataFrame(whole_urls, queries_list_of_lists)
-df = pd.DataFrame(list(dictionary.items ()), columns = ['URL', 'Запросы'])
-df['Запросы'] = df['Запросы'].apply(lambda x: ', '.join(x))
-print(df)
-df = df.astype({'URL':str, 'Запросы':str})
-df.to_csv('query_monitor.csv', index=False)
+# schedule.every().monday.at("10:00", "Europe/Moscow").do(main)
+# schedule.every().tuesday.at("10:00", "Europe/Moscow").do(main)
+# schedule.every().wednesday.at("10:00", "Europe/Moscow").do(main)
+# schedule.every().thursday.at("10:00", "Europe/Moscow").do(main)
+# schedule.every().friday.at("10:00", "Europe/Moscow").do(main)
 
-# Путь к локальному репозиторию
-repo_path = '/seo_serv'
+# while True:
+#     schedule.run_pending()
+#     time.sleep(1)
 
-# Инициализация репозитория
-repo = Repo(repo_path)
-
-# Добавление файла query_monitor.csv
-file_path = '/seo_serv/query_monitor.csv'
-repo.index.add([file_path])
-
-# Создание коммита
-repo.index.commit('Добавлен файл query_monitor.csv')
-
-# Отправка изменений на удаленный репозиторий
-origin = repo.remote('origin')
-origin.push()
+if __name__ == "__main__":
+  main()
 
 # gc = gspread.service_account(filename='C:\\Users\\Alex\\OneDrive\\Рабочий стол\\Python\\dont touch\\key for bigquery gheets\\kommerssc-c8adc1a504f6.json')
 # sh = gc.open("Мониторинг запросов API")

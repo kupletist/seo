@@ -1,4 +1,4 @@
-import pandas as pd
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import os
@@ -31,7 +31,8 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = '/seo_serv/kommerssc-f064e012adc1
 property_id = '341387871'
 
 credentials_path = '/seo_serv/kommerssc-d113d5ba4912.json'
-credentials = service_account.Credentials.from_service_account_file(credentials_path, scopes=['https://www.googleapis.com/auth/webmasters.readonly'])
+credentials = service_account.Credentials.from_service_account_file(credentials_path, scopes=[
+    'https://www.googleapis.com/auth/webmasters.readonly'])
 service = build('webmasters', 'v3', credentials=credentials)
 
 # Запрос на получение списка сайтов
@@ -40,21 +41,22 @@ sites_list = service.sites().list().execute()
 
 # Вывод списка сайтов
 # for site in sites_list['siteEntry']:
-    # print(site['siteUrl'])
+# print(site['siteUrl'])
 
 def main():
-
     today = datetime.today()
     today2 = today.date()
     yesterday = (today - timedelta(days=1)).date()
-    days30_before = (today - timedelta(days=30)).date()
-    # start = yesterday
-    # end = today2
+    # threem_before = (today - timedelta(days=90)).date()
 
-    start = str(days30_before)
+    start = str(yesterday)
     end = str(today2)
+    
+    with open('last_urls.pickle', 'rb') as file:
+        # Загружаем список из файла
+        last3months_urls_list = pickle.load(file)
 
-    def query(service, site_url, payload):
+    def query(service, site_url, payload, exclude_pages):
         response = service.searchanalytics().query(siteUrl=site_url, body=payload).execute()
         results = []
 
@@ -68,10 +70,9 @@ def main():
             data['position'] = round(row['position'], 2)
 
             # Применение фильтров
-            # if 9 <= data['position'] <= 20 and data['impressions'] >= 2000 and 0 <= data['ctr'] <= 2:
-            if 10 <= data['position'] <= 30 and 0 <= data['ctr'] <= 2:
+            if data['page'] not in exclude_pages:
                 results.append(data)
-        # Сортировка по показам
+                # Сортировка по показам
                 results.sort(key=lambda x: x['impressions'], reverse=True)
 
         return pd.DataFrame.from_dict(results)
@@ -87,9 +88,9 @@ def main():
 
     site_url = "sc-domain:kommersant.ru"
 
-    df = query(service, site_url, payload)
-
-    # Добавьте этот код после определения функции query
+    df = query(service, site_url, payload, last3months_urls_list)
+    
+    df = df.head(100)
 
     # df_filtered = df.dropna()  # Удаление строк с отсутствующими значениями
     df_filtered = df[['page', 'impressions', 'ctr', 'position']]  # Выбор нужных столбцов
@@ -97,7 +98,9 @@ def main():
     # df_filtered = df_filtered.astype(str)
 
     urls_list = df_filtered['page'].tolist()
+    
     dimensions_list = []
+    # print(urls_list)
 
     for i in urls_list:
         client = BetaAnalyticsDataClient()
@@ -143,41 +146,46 @@ def main():
 
     titles_list = list(dict.fromkeys(titles_list))  # убираем из списка дубли
 
-    df_filtered['заголовок'] = pd.Series(titles_list + [''] * (len(df_filtered) - len(titles_list)), index=df_filtered.index)
+    df_filtered['заголовок'] = pd.Series(titles_list + [''] * (len(df_filtered) - len(titles_list)),
+                                         index=df_filtered.index)
     # df_filtered['заголовок'] = titles_list
     df_filtered = df_filtered.astype({'impressions': int, 'position': int, 'заголовок': str})
     # print(df_filtered)
 
-    df_filtered.to_csv('seo_titles.csv', index=False)
+    df_filtered.to_csv('new_titles.csv', index=False)
+    
+    # with open('last_urls.pickle', 'wb') as f:
+    #     pickle.dump(df_filtered, f)
 
     # Путь к локальному репозиторию
     repo_path = '/seo_serv'
-    
+
     # Инициализация репозитория
     repo = Repo(repo_path)
-    
+
     # Добавление файла seo_titles.csv
-    file_path = '/seo_serv/seo_titles.csv'
+    file_path = '/seo_serv/new_titles.csv'
     repo.index.add([file_path])
-    
+
     # Создание коммита
-    repo.index.commit('Добавлен файл seo_titles.csv')
-    
+    repo.index.commit('Добавлен файл new_titles.csv')
+
     # Отправка изменений на удаленный репозиторий
     origin = repo.remote('origin')
     origin.push()
-    
-    print("готово")
+
+    # print("Fresh_seo_news отработала, все ок")
+
 
 
 # настройка расписания
-schedule.every().monday.at("08:00", "Europe/Moscow").do(main)
-# schedule.every(3).hours.do(main)
+# schedule.every().day.at("08:00", "Europe/Moscow").do(main)
+# schedule.every(1).hours.do(main)
 
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+
+# while True:
+#     schedule.run_pending()
+#     time.sleep(1)
 
 if __name__ == "__main__":
-  main()
-  
+    main()
